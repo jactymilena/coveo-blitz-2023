@@ -1,9 +1,12 @@
-﻿using System.Runtime.Serialization;
+using System.Runtime.Serialization;
 
 namespace Application.Models.Enemies;
 
 public enum EnemyType
 {
+    [EnumMember(Value = "LVL0")]
+    Lvl0,
+
     [EnumMember(Value = "LVL1")]
     Lvl1,
 

@@ -12,17 +12,28 @@ public class TestEtienne
     public const string Name = "SMI";
     private GameMessage _gameMessage;
     private List<BaseAction> _actions;
+    private List<String> _previousAttacks;
     public double currentMoney { get; set; } 
+    private const string CANT_ATTACK = "CANT_ATTACK"; 
+    // private const int MAX_REINFORCEMENT_UNIT
 
-    private Dictionary<Point, int> _gridBestSpikeTiles { get; set; }
-    private Dictionary<Point, int> _gridBestSpearTiles { get; set; }
-    
+    private List<Dictionary<Point, int>> _gridBestSpikeTiles { get; set; }
+    private List<Dictionary<Point, int>> _gridBestSpearTiles { get; set; }
+
+    public List<float> _pathsCoverage { get; set; }
+    public List<HashSet<Point>> _paths { get; set; }
+
+    private bool firsTurn;
     public TestEtienne()
     {
         Console.WriteLine("Initializing your super mega bot!");
         _actions = new List<BaseAction>();
-        _gridBestSpikeTiles = new Dictionary<Point, int>();
-        _gridBestSpearTiles = new Dictionary<Point, int>();
+        _gridBestSpikeTiles = new List<Dictionary<Point, int>>();
+        _gridBestSpearTiles = new List<Dictionary<Point, int>>();
+        _previousAttacks = new List<string>();
+        _paths = new List<HashSet<Point>>();
+        _pathsCoverage = new List<float>();
+        firsTurn = true;
     }
 
     /// <summary>
@@ -33,11 +44,20 @@ public class TestEtienne
         _gameMessage = gameMessage;
         currentMoney = _gameMessage.TeamInfos[_gameMessage.TeamId].Money;
 
-        if(_gridBestSpikeTiles.Count == 0) {
-            InitBestTiles();
+        if (firsTurn) {
+          InitBestTiles();
+          for(int i = 0; i < _gameMessage.Map.Paths.Count(); i++) {
+              _pathsCoverage.Add(0);
+             _paths.Add(new HashSet<Point>());
+              foreach(var t in _gameMessage.Map.Paths[i].Tiles)
+              {
+                _paths[i].Add(t);
+              }
+
+          }
+            firsTurn = false;
         }
         
-        //var actions = new List<BaseAction>();
         _actions = new List<BaseAction>();
         
         int count = 0;
@@ -52,72 +72,111 @@ public class TestEtienne
     }
     
 
-    private int GetNeighboursCount(Point point, int dist) {
+    private void GetNeighboursCountForPath(Point point) {
         var neighbours = new HashSet<Point>();
-        neighbours.Add(new Point(point.X - dist, point.Y));
-        neighbours.Add(new Point(point.X + dist, point.Y));
-        neighbours.Add(new Point(point.X, point.Y - dist));
-        neighbours.Add(new Point(point.X, point.Y + dist));
-        neighbours.Add(new Point(point.X - dist, point.Y - dist));
-        neighbours.Add(new Point(point.X + dist, point.Y + dist));
-        neighbours.Add(new Point(point.X - dist, point.Y - dist));
-        neighbours.Add(new Point(point.X + dist, point.Y + dist));
+        neighbours.Add(new Point(point.X - 1, point.Y));
+        neighbours.Add(new Point(point.X + 1, point.Y));
+        neighbours.Add(new Point(point.X, point.Y - 1));
+        neighbours.Add(new Point(point.X, point.Y + 1));
+        neighbours.Add(new Point(point.X - 1, point.Y - 1));
+        neighbours.Add(new Point(point.X + 1, point.Y + 1));
+        neighbours.Add(new Point(point.X - 1, point.Y + 1));
+        neighbours.Add(new Point(point.X + 1, point.Y - 1));
 
-        int count = 0;
-        foreach (var p in _gameMessage.Map.Paths) {
-            foreach (var t in p.Tiles) {
+        for (int i = 0; i < _gameMessage.Map.Paths.Count(); i++)
+        {
+            int count = 0;
+            foreach (var t in _gameMessage.Map.Paths[i].Tiles)
+            {
                 if (neighbours.Contains(t))
                     count++;
             }
+
+            this._gridBestSpikeTiles[i].Add(point, count);
         }
 
-        return count;
+        neighbours.Add(new Point(point.X - 2, point.Y));
+        neighbours.Add(new Point(point.X + 2, point.Y));
+        neighbours.Add(new Point(point.X, point.Y - 2));
+        neighbours.Add(new Point(point.X, point.Y + 2));
+        neighbours.Add(new Point(point.X - 2, point.Y + 1));
+        neighbours.Add(new Point(point.X + 2, point.Y + 1));
+        neighbours.Add(new Point(point.X + 1, point.Y - 2));
+        neighbours.Add(new Point(point.X + 1, point.Y + 2));
+        neighbours.Add(new Point(point.X - 2, point.Y - 1));
+        neighbours.Add(new Point(point.X + 2, point.Y - 1));
+        neighbours.Add(new Point(point.X - 1, point.Y - 2));
+        neighbours.Add(new Point(point.X - 1, point.Y + 2));
+        neighbours.Add(new Point(point.X - 2, point.Y - 2));
+        neighbours.Add(new Point(point.X + 2, point.Y + 2));
+        neighbours.Add(new Point(point.X - 2, point.Y + 2));
+        neighbours.Add(new Point(point.X + 2, point.Y - 2));
+
+        for (int i = 0; i < _gameMessage.Map.Paths.Count(); i++)
+        {
+            int count = 0;
+            foreach (var t in _gameMessage.Map.Paths[i].Tiles)
+            {
+                if (neighbours.Contains(t))
+                    count++;
+            }
+
+            this._gridBestSpearTiles[i].Add(point, count);
+        }
     }
     
     private bool GridContains(int x, int y) {
         var grid = _gameMessage.PlayAreas[_gameMessage.TeamId].Grid;
-
         return !(!grid.ContainsKey(x) || !grid[x].ContainsKey(y));
     }
 
     private void InitBestTiles()
     {
+      for (int i = 0; i < _gameMessage.Map.Paths.Count(); i++) {
+        _gridBestSpikeTiles.Add(new Dictionary<Point, int>());
+        _gridBestSpearTiles.Add(new Dictionary<Point, int>());
+      }
+
         PlayArea PA = _gameMessage.PlayAreas[_gameMessage.TeamId];
         for (int y = 0; y < _gameMessage.Map.Height; y++) {
             for (int x = 0; x < _gameMessage.Map.Width; x++) {
                 if(!GridContains(x, y)) {
                     Point p = new Point(x, y);
-                    _gridBestSpikeTiles[p] = GetNeighboursCount(p, 1);
-                    _gridBestSpearTiles[p] = GetNeighboursCount(p, 2);
+                    GetNeighboursCountForPath(p);
                 }       
             }
         }   
     }
 
-    
-
-    private Point GetMaxSpikeTile() 
+    private int GetIdxWorstPathCoverage()
     {
-        if (_gridBestSpikeTiles.Count == 0) {
-            var test = 10;
-        }
+      int pos = 0;
+      for (int i = 0; i < this._pathsCoverage.Count(); i++)
+      {
+          if (this._pathsCoverage[i] < this._pathsCoverage[pos]) { pos = i; }
+      }
 
-        if (_gridBestSpikeTiles.Count != 0) {
-            var max = _gridBestSpikeTiles.Max(x => x.Value);
-            if(max > 5)
-                return _gridBestSpikeTiles.First(x => x.Value == max).Key;
+      return pos;
+    }
+
+    private Point GetMaxSpikeTile(int worstPathIndex) 
+    {
+        if (_gridBestSpikeTiles[worstPathIndex].Count == 0) {
+            var max = _gridBestSpikeTiles[worstPathIndex].Max(x => x.Value);
+            if(max >= 5)
+                return _gridBestSpikeTiles[worstPathIndex].First(x => x.Value == max).Key;
         }
 
         return null;
     }
 
-    private Point GetMaxSpearTile()
+    private Point GetMaxSpearTile(int worstPathIndex)
     {
         
-        if (_gridBestSpearTiles.Count != 0)
+        if (_gridBestSpearTiles[worstPathIndex].Count != 0)
         {
-            var max = _gridBestSpearTiles.Max(x => x.Value);
-           return _gridBestSpearTiles.First(x => x.Value == max).Key;
+          var max = _gridBestSpearTiles[worstPathIndex].Max(x => x.Value);
+           return _gridBestSpearTiles[worstPathIndex].First(x => x.Value == max).Key;
         }
 
         return null;
@@ -137,34 +196,70 @@ public class TestEtienne
         return affordableTowers;
     }
 
+    private void UpdateCoverage(Point origin, int range)
+    {
+        for (int i = 0; i < _gameMessage.Map.Paths.Count(); i++){
+            for (int x = origin.X; x <= origin.X + range; x++) {
+                for (int y = origin.Y; y <= origin.Y + range; y++){
+                    
+
+                    // if (_gameMessage.Map.Paths[i])
+                    if (_paths[i].Contains(new Point(x, y)))
+                    {
+                        float newVal = _pathsCoverage[i] += (1.0f / (float)_gameMessage.Map.Paths.Count());
+                        _pathsCoverage[i] = newVal;
+                    }
+                }
+        }
+      }
+    }
 
     private bool BuyTower() {
         bool hasBuilt = false;
         var affordableTowers = GetAvailableTowers();
-        var p = GetMaxSpikeTile();
-
+        int worstPathCoverage = GetIdxWorstPathCoverage();
+        var p = GetMaxSpikeTile(worstPathCoverage);
+    
         if (affordableTowers.Contains(TowerType.SpikeShooter)) {
             if(p != null)
             {
                 Console.WriteLine("SpikeShooter");
                 _actions.Add(new Build(TowerType.SpikeShooter, p));
                 currentMoney -= _gameMessage.Shop.Towers[TowerType.SpikeShooter].Price;
-                _gridBestSpikeTiles.Remove(p);
-                _gridBestSpearTiles.Remove(p);
+
+                for (int i = 0; i < _gameMessage.Map.Paths.Count(); i++)
+                {
+                  _gridBestSpearTiles[i].Remove(p);
+                  _gridBestSpikeTiles[i].Remove(p);
+                }
+
+                this.UpdateCoverage(p, 1);
+
                 hasBuilt = true;
             }
         }
-        var p2 = GetMaxSpearTile();
-        if (p2 != null && p2 != p)
+
+        if(!hasBuilt && p != null && _gridBestSpikeTiles[worstPathCoverage][p] > 5)
         {
-            if (affordableTowers.Contains(TowerType.BombShooter) && !hasBuilt)
+            return false;
+        }
+
+        var p2 = GetMaxSpearTile(worstPathCoverage);
+        if (p2 != null && !hasBuilt)
+        {
+            if (affordableTowers.Contains(TowerType.BombShooter) && !hasBuilt && _gameMessage.Round >= 5)
             {
                 Console.WriteLine("BombShooter");
                 _actions.Add(new Build(TowerType.BombShooter, p2));
                 currentMoney -= _gameMessage.Shop.Towers[TowerType.BombShooter].Price;
 
-                _gridBestSpikeTiles.Remove(p2);
-                _gridBestSpearTiles.Remove(p2);
+                for (int i = 0; i < _gameMessage.Map.Paths.Count(); i++)
+                {
+                  _gridBestSpearTiles[i].Remove(p2);
+                  _gridBestSpikeTiles[i].Remove(p2);
+                }
+
+                this.UpdateCoverage(p2, 2);
 
                 hasBuilt = true;
             }
@@ -176,8 +271,13 @@ public class TestEtienne
                 _actions.Add(new Build(TowerType.SpearShooter, p2));
                 currentMoney -= _gameMessage.Shop.Towers[TowerType.SpearShooter].Price;
 
-                _gridBestSpikeTiles.Remove(p2);
-                _gridBestSpearTiles.Remove(p2);
+                for (int i = 0; i < _gameMessage.Map.Paths.Count(); i++)
+                {
+                  _gridBestSpearTiles[i].Remove(p2);
+                  _gridBestSpikeTiles[i].Remove(p2);
+                }
+
+                this.UpdateCoverage(p2, 2);
                 
                 hasBuilt = true;
             }
@@ -186,7 +286,7 @@ public class TestEtienne
          return hasBuilt;
     }
 
-    private EnemyType GetBestReinforcementAvailable() {
+        private EnemyType GetBestReinforcementAvailable() {
         var reinforcements = _gameMessage.Shop.Reinforcements;
 
         var affordableReinforcements = reinforcements.Where(i => i.Value.Price <= currentMoney).ToDictionary(i => i.Key, i => i.Value);
@@ -205,20 +305,48 @@ public class TestEtienne
     private string GetMaxHealthEnemy() {
         var enemies = _gameMessage.TeamInfos;
         
-        var maxEnemy = enemies.Where(en => en.Value.IsAlive == false).MinBy(k => k.Value.Hp);
+        var maxEnemies = enemies.Where(en => en.Value.IsAlive == true && en.Value.Id != _gameMessage.TeamId).OrderByDescending(team => team.Value.Hp).ToList();
 
-        return maxEnemy.Value.Id;
+        foreach(var enemy in maxEnemies) {
+            if(CanAttack(enemy.Value.Id)) {
+                return enemy.Value.Id;
+            }
+        }
+
+        return CANT_ATTACK;
     }
 
     private void Attack() {
+        if(_gameMessage.Shop.Reinforcements.Count == 0) return;
+        
         var reinforcement = GetBestReinforcementAvailable();
         var enemyToAttack = GetMaxHealthEnemy();
         
         Console.WriteLine("Reinforcement sent: " + reinforcement);
         Console.WriteLine("Enemy to attack: " + enemyToAttack);
 
+        if(enemyToAttack == CANT_ATTACK) return;
+
         _actions.Add(new SendReinforcements(reinforcement, enemyToAttack));
+        _previousAttacks.Add(enemyToAttack);
+        currentMoney -= _gameMessage.Shop.Reinforcements[reinforcement].Price;
     }
 
+    // Check if previous attack has spawn
+    private bool CanAttack(string teamId) => _previousAttacks.Count == 0 || HasReinforcementSpawn(teamId);
+
+    private bool HasReinforcementSpawn(string teamId) {
+        var ourTeamId = _gameMessage.TeamId;
+        var enemyReinforcementQueue = _gameMessage.PlayAreas[teamId].enemyReinforcementsQueue;
+        var reinforcementSent = enemyReinforcementQueue.Where(e => e.From == ourTeamId).ToList();
+
+        if (reinforcementSent.Count != 0) {
+            return false;
+        }
+
+        _previousAttacks.Remove(teamId);
+        return true;
+    }
     
+
 }
