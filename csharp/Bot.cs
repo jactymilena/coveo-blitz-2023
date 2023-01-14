@@ -15,6 +15,8 @@ public class Bot
     private List<String> _previousAttacks;
     public double currentMoney { get; set; } 
     private const string CANT_ATTACK = "CANT_ATTACK"; 
+    private const int MAX_REINFORCEMENT = 8;
+
 
     private List<Dictionary<Point, int>> _gridBestSpikeTiles { get; set; }
     private List<Dictionary<Point, int>> _gridBestSpearTiles { get; set; }
@@ -192,11 +194,30 @@ public class Bot
     }
     private Point GetMaxSpearTile(int worstPathIndex)
     {
-        
         if (_gridBestSpearTiles[worstPathIndex].Count != 0)
         {
-          var max = _gridBestSpearTiles[worstPathIndex].Max(x => x.Value);
-           return _gridBestSpearTiles[worstPathIndex].First(x => x.Value == max).Key;
+            var max = _gridBestSpearTiles[worstPathIndex].Max(x => x.Value);
+
+            var possibilities = _gridBestSpearTiles[worstPathIndex].Where(x => x.Value == max);
+            int realMax = 0;
+            Point realPos =  _gridBestSpearTiles[worstPathIndex].First(x => x.Value == max).Key;
+
+            foreach(var m in possibilities)
+            {
+                int maximum = 0;
+                foreach (var path in this._gridBestSpearTiles)
+                {
+                    maximum += path[m.Key];
+                }
+
+                if (maximum > realMax)
+                {
+                    realMax = maximum;
+                    realPos = m.Key;
+                }
+            }
+
+            return realPos;
         }
 
         return null;
@@ -306,20 +327,30 @@ public class Bot
          return hasBuilt;
     }
 
-        private EnemyType GetBestReinforcementAvailable() {
+    private KeyValuePair<EnemyType, int> GetBestReinforcementAvailable() {
         var reinforcements = _gameMessage.Shop.Reinforcements;
 
         var affordableReinforcements = reinforcements.Where(i => i.Value.Price <= currentMoney).ToDictionary(i => i.Key, i => i.Value);
         
         double maxPrice = -1;
         EnemyType enemyToSend = EnemyType.Lvl0;
+        int maxNumberOfReinforcement = 1;
 
         foreach(var reinforcement in affordableReinforcements) {
-            if(reinforcement.Value.Price > maxPrice) {
+        //     int numberOfReinforcement = (int)Math.Floor((float)(MAX_REINFORCEMENT / enemyUnitCost));
+        //     Console.WriteLine("Number of reinforcement: " + maxNumberOfReinforcement);
+        //     maxPrice = numberOfReinforcement * reinforcement.Value.Price;
+            if(reinforcement.Value.Price > maxPrice && currentMoney >= maxPrice) {
+                int numberOfReinforcement = (int)Math.Floor((float)(MAX_REINFORCEMENT / reinforcement.Value.Count));
+                while(currentMoney < numberOfReinforcement * reinforcement.Value.Price) {
+                    numberOfReinforcement -= reinforcement.Value.Count;
+                }
                 enemyToSend = reinforcement.Key;
+                maxPrice = reinforcement.Value.Price;
+                maxNumberOfReinforcement = numberOfReinforcement;
             }
         }
-        return enemyToSend;
+        return new KeyValuePair<EnemyType, int>(enemyToSend, maxNumberOfReinforcement);
     }
     
     private string GetMaxHealthEnemy() {
@@ -339,7 +370,9 @@ public class Bot
     private void Attack() {
         if(_gameMessage.Shop.Reinforcements.Count == 0 || !AllPathCovered()) return;
         
-        var reinforcement = GetBestReinforcementAvailable();
+        var vals = GetBestReinforcementAvailable();
+        var reinforcement = vals.Key;
+        var numberOfReinforcement = vals.Value;
         var enemyToAttack = GetMaxHealthEnemy();
         
         Console.WriteLine("Reinforcement sent: " + reinforcement);
@@ -347,9 +380,11 @@ public class Bot
 
         if(enemyToAttack == CANT_ATTACK || reinforcement == EnemyType.Lvl0) return;
 
-        _actions.Add(new SendReinforcements(reinforcement, enemyToAttack));
+        for(var i = 0; i < numberOfReinforcement; i++) {
+            _actions.Add(new SendReinforcements(reinforcement, enemyToAttack));
+        }
         _previousAttacks.Add(enemyToAttack);
-        currentMoney -= _gameMessage.Shop.Reinforcements[reinforcement].Price;
+        currentMoney -= _gameMessage.Shop.Reinforcements[reinforcement].Price * numberOfReinforcement;
     }
 
     // Check if previous attack has spawn
