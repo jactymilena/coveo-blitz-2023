@@ -75,7 +75,6 @@ public class Bot
     
     private bool GridContains(int x, int y) {
         var grid = _gameMessage.PlayAreas[_gameMessage.TeamId].Grid;
-
         return !(!grid.ContainsKey(x) || !grid[x].ContainsKey(y));
     }
 
@@ -211,7 +210,7 @@ public class Bot
     private string GetMaxHealthEnemy() {
         var enemies = _gameMessage.TeamInfos;
         
-        var maxEnemy = enemies.Where(en => en.Value.IsAlive == true).MaxBy(k => k.Value.Hp);
+        var maxEnemy = enemies.Where(en => en.Value.IsAlive == true && en.Value.Id != _gameMessage.TeamId).MaxBy(k => k.Value.Hp);
 
         return maxEnemy.Value.Id;
     }
