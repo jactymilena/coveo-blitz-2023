@@ -162,13 +162,34 @@ public class Bot
     {
         if (_gridBestSpikeTiles[worstPathIndex].Count != 0) {
             var max = _gridBestSpikeTiles[worstPathIndex].Max(x => x.Value);
-            if(max >= 5)
-                return _gridBestSpikeTiles[worstPathIndex].First(x => x.Value == max).Key;
+
+              var possibilities = _gridBestSpikeTiles[worstPathIndex].Where(x => x.Value == max);
+              int realMax = 0;
+              Point realPos =  _gridBestSpikeTiles[worstPathIndex].First(x => x.Value == max).Key;
+
+              foreach(var m in possibilities)
+              {
+                int maximum = 0;
+                foreach (var path in this._gridBestSpikeTiles)
+                {
+                  maximum += path[m.Key];
+                }
+
+                if (maximum > realMax)
+                {
+                  realMax = maximum;
+                  realPos = m.Key;
+                }
+              }
+
+              if (realMax < 5)
+                return null;
+
+             return realPos;
         }
 
         return null;
     }
-
     private Point GetMaxSpearTile(int worstPathIndex)
     {
         
