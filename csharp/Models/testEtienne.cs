@@ -15,7 +15,6 @@ public class TestEtienne
     private List<String> _previousAttacks;
     public double currentMoney { get; set; } 
     private const string CANT_ATTACK = "CANT_ATTACK"; 
-    // private const int MAX_REINFORCEMENT_UNIT
 
     private List<Dictionary<Point, int>> _gridBestSpikeTiles { get; set; }
     private List<Dictionary<Point, int>> _gridBestSpearTiles { get; set; }
@@ -161,7 +160,7 @@ public class TestEtienne
 
     private Point GetMaxSpikeTile(int worstPathIndex) 
     {
-        if (_gridBestSpikeTiles[worstPathIndex].Count == 0) {
+        if (_gridBestSpikeTiles[worstPathIndex].Count != 0) {
             var max = _gridBestSpikeTiles[worstPathIndex].Max(x => x.Value);
             if(max >= 5)
                 return _gridBestSpikeTiles[worstPathIndex].First(x => x.Value == max).Key;
@@ -286,13 +285,13 @@ public class TestEtienne
          return hasBuilt;
     }
 
-        private EnemyType GetBestReinforcementAvailable() {
+    private EnemyType GetBestReinforcementAvailable() {
         var reinforcements = _gameMessage.Shop.Reinforcements;
 
         var affordableReinforcements = reinforcements.Where(i => i.Value.Price <= currentMoney).ToDictionary(i => i.Key, i => i.Value);
         
         double maxPrice = -1;
-        EnemyType enemyToSend = EnemyType.Lvl1;
+        EnemyType enemyToSend = EnemyType.Lvl0;
 
         foreach(var reinforcement in affordableReinforcements) {
             if(reinforcement.Value.Price > maxPrice) {
@@ -317,7 +316,7 @@ public class TestEtienne
     }
 
     private void Attack() {
-        if(_gameMessage.Shop.Reinforcements.Count == 0) return;
+        if(_gameMessage.Shop.Reinforcements.Count == 0 || !AllPathCovered()) return;
         
         var reinforcement = GetBestReinforcementAvailable();
         var enemyToAttack = GetMaxHealthEnemy();
@@ -325,7 +324,7 @@ public class TestEtienne
         Console.WriteLine("Reinforcement sent: " + reinforcement);
         Console.WriteLine("Enemy to attack: " + enemyToAttack);
 
-        if(enemyToAttack == CANT_ATTACK) return;
+        if(enemyToAttack == CANT_ATTACK || reinforcement == EnemyType.Lvl0) return;
 
         _actions.Add(new SendReinforcements(reinforcement, enemyToAttack));
         _previousAttacks.Add(enemyToAttack);
@@ -345,6 +344,15 @@ public class TestEtienne
         }
 
         _previousAttacks.Remove(teamId);
+        return true;
+    }
+
+    private bool AllPathCovered() {
+        foreach(float f in _pathsCoverage) {
+            if(f == 0) {
+                return false;
+            }
+        }
         return true;
     }
     

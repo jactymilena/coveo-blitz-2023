@@ -198,8 +198,8 @@ public class Bot
     private void UpdateCoverage(Point origin, int range)
     {
         for (int i = 0; i < _gameMessage.Map.Paths.Count(); i++){
-            for (int x = origin.X; x <= origin.X + range; x++) {
-                for (int y = origin.Y; y <= origin.Y + range; y++){
+            for (int x = origin.X - range; x <= origin.X + range; x++) {
+                for (int y = origin.Y - range; y <= origin.Y + range; y++){
                     
 
                     // if (_gameMessage.Map.Paths[i])
@@ -316,7 +316,7 @@ public class Bot
     }
 
     private void Attack() {
-        if(_gameMessage.Shop.Reinforcements.Count == 0) return;
+        if(_gameMessage.Shop.Reinforcements.Count == 0 || !AllPathCovered()) return;
         
         var reinforcement = GetBestReinforcementAvailable();
         var enemyToAttack = GetMaxHealthEnemy();
@@ -347,5 +347,13 @@ public class Bot
         return true;
     }
     
+    private bool AllPathCovered() {
+        foreach(float f in _pathsCoverage) {
+            if(f == 0) {
+                return false;
+            }
+        }
+        return true;
+    }
 
 }
