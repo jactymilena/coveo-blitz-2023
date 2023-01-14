@@ -12,7 +12,10 @@ public class Bot
     public const string Name = "SMI";
     private GameMessage _gameMessage;
     private List<BaseAction> _actions;
+    private List<String> _previousAttacks;
     public double currentMoney { get; set; } 
+    private const string CANT_ATTACK = "CANT_ATTACK"; 
+    // private int tickBeforeAttack;
 
     private Dictionary<Point, int> _gridBestSpikeTiles { get; set; }
     private Dictionary<Point, int> _gridBestSpearTiles { get; set; }
@@ -23,6 +26,7 @@ public class Bot
         _actions = new List<BaseAction>();
         _gridBestSpikeTiles = new Dictionary<Point, int>();
         _gridBestSpearTiles = new Dictionary<Point, int>();
+        _previousAttacks = new List<string>();
     }
 
     /// <summary>
@@ -210,20 +214,47 @@ public class Bot
     private string GetMaxHealthEnemy() {
         var enemies = _gameMessage.TeamInfos;
         
-        var maxEnemy = enemies.Where(en => en.Value.IsAlive == true && en.Value.Id != _gameMessage.TeamId).MaxBy(k => k.Value.Hp);
+        var maxEnemies = enemies.Where(en => en.Value.IsAlive == true && en.Value.Id != _gameMessage.TeamId).OrderByDescending(team => team.Value.Hp).ToList();
 
-        return maxEnemy.Value.Id;
+        foreach(var enemy in maxEnemies) {
+            if(CanAttack(enemy.Value.Id)) {
+                return enemy.Value.Id;
+            }
+        }
+
+        return CANT_ATTACK;
     }
 
     private void Attack() {
+        if(_gameMessage.Shop.Reinforcements.Count == 0) return;
+        
         var reinforcement = GetBestReinforcementAvailable();
         var enemyToAttack = GetMaxHealthEnemy();
         
         Console.WriteLine("Reinforcement sent: " + reinforcement);
         Console.WriteLine("Enemy to attack: " + enemyToAttack);
 
+        if(enemyToAttack == CANT_ATTACK) return;
+
         _actions.Add(new SendReinforcements(reinforcement, enemyToAttack));
+        _previousAttacks.Add(enemyToAttack);
+        currentMoney -= _gameMessage.Shop.Reinforcements[reinforcement].Price;
     }
 
+    // Check if previous attack has spawn
+    private bool CanAttack(string teamId) => _previousAttacks.Count == 0 || HasReinforcementSpawn(teamId);
+
+    private bool HasReinforcementSpawn(string teamId) {
+        var ourTeamId = _gameMessage.TeamId;
+        var enemyReinforcementQueue = _gameMessage.PlayAreas[teamId].enemyReinforcementsQueue;
+        var reinforcementSent = enemyReinforcementQueue.Where(e => e.From == ourTeamId).ToList();
+
+        if (reinforcementSent.Count != 0) {
+            return false;
+        }
+
+        _previousAttacks.Remove(teamId);
+        return true;
+    }
     
 }

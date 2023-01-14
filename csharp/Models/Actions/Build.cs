@@ -1,4 +1,4 @@
-﻿using Application.Models.Towers;
+using Application.Models.Towers;
 
 namespace Application.Models.Actions;
 
