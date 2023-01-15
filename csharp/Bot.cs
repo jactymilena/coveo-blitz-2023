@@ -16,13 +16,18 @@ public class Bot
     public double currentMoney { get; set; } 
     private const string CANT_ATTACK = "CANT_ATTACK"; 
     private const int MAX_REINFORCEMENT = 8;
-
+    private bool _attackFirst;
 
     private List<Dictionary<Point, int>> _gridBestSpikeTiles { get; set; }
     private List<Dictionary<Point, int>> _gridBestSpearTiles { get; set; }
 
     public List<float> _pathsCoverage { get; set; }
     public List<HashSet<Point>> _paths { get; set; }
+
+    
+    public bool _bomb { get; set; }
+    public bool _bombBlocker { get; set; }
+    public int _bombAmount { get; set; }
 
     private bool firsTurn;
     public Bot()
@@ -35,6 +40,10 @@ public class Bot
         _paths = new List<HashSet<Point>>();
         _pathsCoverage = new List<float>();
         firsTurn = true;
+        _bomb = false;
+        _bombBlocker = true;
+        _bombAmount = 0;
+        _attackFirst = true;
     }
 
     /// <summary>
@@ -45,29 +54,57 @@ public class Bot
         _gameMessage = gameMessage;
         currentMoney = _gameMessage.TeamInfos[_gameMessage.TeamId].Money;
 
-        if (firsTurn) {
-          InitBestTiles();
-          for(int i = 0; i < _gameMessage.Map.Paths.Count(); i++) {
-              _pathsCoverage.Add(0);
-             _paths.Add(new HashSet<Point>());
-              foreach(var t in _gameMessage.Map.Paths[i].Tiles)
-              {
-                _paths[i].Add(t);
-              }
+        // if (firsTurn) {
+        //   InitBestTiles();
+        //   for(int i = 0; i < _gameMessage.Map.Paths.Count(); i++) {
+        //       _pathsCoverage.Add(0);
+        //      _paths.Add(new HashSet<Point>());
+        //       foreach(var t in _gameMessage.Map.Paths[i].Tiles)
+        //       {
+        //         _paths[i].Add(t);
+        //       }
 
-          }
+        //   }
+        //     firsTurn = false;
+        // }
+
+        if (firsTurn)
+        {
+            InitBestTiles();
+            for (int i = 0; i < _gameMessage.Map.Paths.Count(); i++)
+            {
+                _pathsCoverage.Add(0);
+                _paths.Add(new HashSet<Point>());
+                foreach (var t in _gameMessage.Map.Paths[i].Tiles)
+                {
+                    _paths[i].Add(t);
+                }
+
+            }
             firsTurn = false;
         }
+
+        if(!_bombBlocker && AllPath100Percent() && _bombAmount < _paths.Count()) 
+        {
+            _bomb = true;
+        }
+        else
+        {
+            _bomb = false;
+        }//check for Bomb
         
         _actions = new List<BaseAction>();
         
+        if(_attackFirst) Attack();
+
         int count = 0;
         while(BuyTower()) {
             count++;
             Console.WriteLine("Achat " + count);
             Console.WriteLine("Money" + currentMoney);
         }
-        Attack();
+
+        if(!_attackFirst) Attack();
 
         return Task.FromResult(_actions);
     }
@@ -217,6 +254,8 @@ public class Bot
                 }
             }
 
+            if (realMax == 0)
+                return null;
             return realPos;
         }
 
@@ -247,7 +286,7 @@ public class Bot
                     // if (_gameMessage.Map.Paths[i])
                     if (_paths[i].Contains(new Point(x, y)))
                     {
-                        float newVal = _pathsCoverage[i] += (1.0f / (float)_gameMessage.Map.Paths.Count());
+                        float newVal = _pathsCoverage[i] + (1.0f / (float)_gameMessage.Map.Paths.Count());
                         _pathsCoverage[i] = newVal;
                     }
                 }
@@ -255,14 +294,16 @@ public class Bot
       }
     }
 
-    private bool BuyTower() {
+    private bool BuyTower()
+    {
         bool hasBuilt = false;
         var affordableTowers = GetAvailableTowers();
         int worstPathCoverage = GetIdxWorstPathCoverage();
         var p = GetMaxSpikeTile(worstPathCoverage);
-    
-        if (affordableTowers.Contains(TowerType.SpikeShooter)) {
-            if(p != null)
+
+        if (affordableTowers.Contains(TowerType.SpikeShooter))
+        {
+            if (p != null)
             {
                 Console.WriteLine("SpikeShooter");
                 _actions.Add(new Build(TowerType.SpikeShooter, p));
@@ -270,8 +311,8 @@ public class Bot
 
                 for (int i = 0; i < _gameMessage.Map.Paths.Count(); i++)
                 {
-                  _gridBestSpearTiles[i].Remove(p);
-                  _gridBestSpikeTiles[i].Remove(p);
+                    _gridBestSpearTiles[i].Remove(p);
+                    _gridBestSpikeTiles[i].Remove(p);
                 }
 
                 this.UpdateCoverage(p, 1);
@@ -280,7 +321,45 @@ public class Bot
             }
         }
 
-        if(!hasBuilt && p != null && _gridBestSpikeTiles[worstPathCoverage][p] > 5)
+        if (!hasBuilt && p != null && _gridBestSpikeTiles[worstPathCoverage][p] > 5)
+        {
+            return false;
+        }
+        Point BombPoint = null;
+        if(_bomb)
+        {
+            var pathToBomb = _bombAmount;
+            var start = this._gameMessage.Map.Paths[_bombAmount].Tiles[0];
+            
+            for (int x = start.X - 2; x <= start.X + 2; x++)
+            {
+                for (int y = start.Y - 2; y <= start.Y + 2; y++)
+                {
+                    Point TestBombPoint = new Point(x, y);
+                    if (TileIsValid(x, y))
+                    {
+                        BombPoint = TestBombPoint;
+                    }
+                }
+            }
+            if (affordableTowers.Contains(TowerType.BombShooter) && BombPoint != null)
+            {
+                Console.WriteLine("BombShooter");
+                _actions.Add(new Build(TowerType.BombShooter, BombPoint));
+                currentMoney -= _gameMessage.Shop.Towers[TowerType.BombShooter].Price;
+
+                for (int i = 0; i < _gameMessage.Map.Paths.Count(); i++)
+                {
+                    _gridBestSpearTiles[i].Remove(BombPoint);
+                    _gridBestSpikeTiles[i].Remove(BombPoint);
+                }
+                _bombAmount++;
+                this.UpdateCoverage(BombPoint, 2);
+                hasBuilt = true;
+             }
+        }
+
+        if(BombPoint != null && !hasBuilt)
         {
             return false;
         }
@@ -288,22 +367,22 @@ public class Bot
         var p2 = GetMaxSpearTile(worstPathCoverage);
         if (p2 != null && !hasBuilt)
         {
-            if (affordableTowers.Contains(TowerType.BombShooter) && !hasBuilt && _gameMessage.Round >= 5)
-            {
-                Console.WriteLine("BombShooter");
-                _actions.Add(new Build(TowerType.BombShooter, p2));
-                currentMoney -= _gameMessage.Shop.Towers[TowerType.BombShooter].Price;
+            //if (affordableTowers.Contains(TowerType.BombShooter) && !hasBuilt && _gameMessage.Round >= 5)
+            //{
+            //    Console.WriteLine("BombShooter");
+            //    _actions.Add(new Build(TowerType.BombShooter, p2));
+            //    currentMoney -= _gameMessage.Shop.Towers[TowerType.BombShooter].Price;
 
-                for (int i = 0; i < _gameMessage.Map.Paths.Count(); i++)
-                {
-                  _gridBestSpearTiles[i].Remove(p2);
-                  _gridBestSpikeTiles[i].Remove(p2);
-                }
+            //    for (int i = 0; i < _gameMessage.Map.Paths.Count(); i++)
+            //    {
+            //        _gridBestSpearTiles[i].Remove(p2);
+            //        _gridBestSpikeTiles[i].Remove(p2);
+            //    }
 
-                this.UpdateCoverage(p2, 2);
+            //    this.UpdateCoverage(p2, 2);
 
-                hasBuilt = true;
-            }
+            //    hasBuilt = true;
+            //}
 
             if (affordableTowers.Contains(TowerType.SpearShooter) && !hasBuilt)
             {
@@ -314,18 +393,31 @@ public class Bot
 
                 for (int i = 0; i < _gameMessage.Map.Paths.Count(); i++)
                 {
-                  _gridBestSpearTiles[i].Remove(p2);
-                  _gridBestSpikeTiles[i].Remove(p2);
+                    _gridBestSpearTiles[i].Remove(p2);
+                    _gridBestSpikeTiles[i].Remove(p2);
                 }
 
                 this.UpdateCoverage(p2, 2);
-                
+
                 hasBuilt = true;
             }
         }
 
-         return hasBuilt;
+        return hasBuilt;
     }
+
+    private bool TileIsValid(int x, int y)
+    {
+      var grid = _gameMessage.PlayAreas[_gameMessage.TeamId].Grid;
+      if (!grid.ContainsKey(x) || !grid[x].ContainsKey(y))
+        return false;
+
+      if (grid[x][y].HasObstacle || grid[x][y].Towers.Count() != 0 || grid[x][y].Paths.Count() != 0)
+        return false;
+
+       return true;
+    }
+
 
     private KeyValuePair<EnemyType, int> GetBestReinforcementAvailable() {
         var reinforcements = _gameMessage.Shop.Reinforcements;
@@ -340,10 +432,14 @@ public class Bot
         //     int numberOfReinforcement = (int)Math.Floor((float)(MAX_REINFORCEMENT / enemyUnitCost));
         //     Console.WriteLine("Number of reinforcement: " + maxNumberOfReinforcement);
         //     maxPrice = numberOfReinforcement * reinforcement.Value.Price;
-            if(reinforcement.Value.Price > maxPrice && currentMoney >= maxPrice) {
-                int numberOfReinforcement = (int)Math.Floor((float)(MAX_REINFORCEMENT / reinforcement.Value.Count));
+            if(reinforcement.Value.Price >= maxPrice && currentMoney >= maxPrice) {
+                // int numberOfReinforcement = (int)Math.Floor((float)(MAX_REINFORCEMENT / reinforcement.Value.Count));
+                // while(currentMoney < numberOfReinforcement * reinforcement.Value.Price) {
+                //     numberOfReinforcement -= reinforcement.Value.Count;
+                // }
+                int numberOfReinforcement = MAX_REINFORCEMENT;
                 while(currentMoney < numberOfReinforcement * reinforcement.Value.Price) {
-                    numberOfReinforcement -= reinforcement.Value.Count;
+                    numberOfReinforcement -= 1;
                 }
                 enemyToSend = reinforcement.Key;
                 maxPrice = reinforcement.Value.Price;
@@ -411,5 +507,19 @@ public class Bot
         }
         return true;
     }
+
+     private bool AllPath100Percent()
+    {
+        foreach (float f in _pathsCoverage)
+        {
+            Console.WriteLine("Coverage : " + f);
+            if (f < 1.0f)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
 
 }
